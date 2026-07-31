@@ -1,0 +1,226 @@
+"""
+OEE Calculator dari Tabel DSC (Daily Shift Card) — Drilling Rig
+=================================================================
+
+Menghitung Overall Equipment Effectiveness (OEE) untuk aktivitas
+pengeboran eksplorasi berdasarkan rekap waktu per kategori pada
+tabel DSC (Daily Shift Card).
+
+Kategori kolom DSC dikelompokkan menjadi:
+    - PLANNED_DOWNTIME_COLUMNS : aktivitas rutin/wajib terjadwal
+    - UNPLANNED_DOWNTIME_COLUMNS : delay/tunggu/masalah tak terjadwal
+    - SUPPORT_ACTIVITY_COLUMNS : aktivitas pendukung siklus rig
+    - DRILLING_COLUMN : aktivitas pengeboran aktif
+
+Author: -
+"""
+
+from dataclasses import dataclass, field
+from typing import Dict, List
+import csv
+
+
+# ---------------------------------------------------------------------------
+# 1. KONFIGURASI KATEGORI KOLOM DSC
+# ---------------------------------------------------------------------------
+# Sesuaikan daftar ini dengan nama kolom persis yang ada di file DSC kamu.
+
+PLANNED_DOWNTIME_COLUMNS: List[str] = [
+    "safety_talk",
+    "fmds_fit_to_work",
+    "cek_mesin_isi_bbm",
+    "pm_check",
+    "istirahat_sholat",
+]
+
+UNPLANNED_DOWNTIME_COLUMNS: List[str] = [
+    "transportasi",
+    "aksesibilitas",
+    "menunggu_man_power",
+    "menunggu_fuel",
+    "masalah_air",
+    "waiting_pad_akses",
+    "tunggu_dozer",
+    "tunggu_boomtruck",
+    "masalah_teknikal",
+    "masalah_mekanikal",
+    "tunggu_part",
+    "tunggu_accessories",
+    "tunggu_supervisor",
+    "kondisi_cuaca",
+    "izin_dan_lain",
+]
+
+SUPPORT_ACTIVITY_COLUMNS: List[str] = [
+    "cabut_pipa",
+    "rig_down",
+    "moving_rig",
+    "menata_rig",
+    "cuci_lubang",
+]
+
+DRILLING_COLUMN: str = "drilling"
+
+ALL_TIME_COLUMNS: List[str] = (
+    PLANNED_DOWNTIME_COLUMNS
+    + UNPLANNED_DOWNTIME_COLUMNS
+    + SUPPORT_ACTIVITY_COLUMNS
+    + [DRILLING_COLUMN]
+)
+
+
+# ---------------------------------------------------------------------------
+# 2. STRUKTUR DATA
+# ---------------------------------------------------------------------------
+
+@dataclass
+class ShiftRecord:
+    """Satu baris data shift (bisa per hari / per rig)."""
+    shift_id: str
+    durations_minutes: Dict[str, float]      # {nama_kolom: menit}
+    total_shift_minutes: float                # misal 570 utk 07:00-16:30
+    meter_bor_total: float                    # total meter bor tercapai
+    meter_bor_reject: float                   # core loss / reject (m)
+    ideal_cycle_time_per_meter: float          # menit per meter (standar rig)
+
+
+@dataclass
+class OEEResult:
+    shift_id: str
+    planned_production_time: float
+    operating_time: float
+    drilling_time: float
+    availability: float
+    performance: float
+    quality: float
+    oee: float
+    loss_breakdown: Dict[str, float] = field(default_factory=dict)
+
+    def summary(self) -> str:
+        lines = [
+            f"=== Hasil OEE - Shift {self.shift_id} ===",
+            f"Planned Production Time : {self.planned_production_time:.1f} menit",
+            f"Operating Time          : {self.operating_time:.1f} menit",
+            f"Drilling Time (aktif)   : {self.drilling_time:.1f} menit",
+            "-" * 45,
+            f"Availability            : {self.availability*100:.1f}%",
+            f"Performance             : {self.performance*100:.1f}%",
+            f"Quality                 : {self.quality*100:.1f}%",
+            "-" * 45,
+            f"OEE                     : {self.oee*100:.1f}%",
+            "",
+            "Top penyebab downtime (menit):",
+        ]
+        top_losses = sorted(
+            self.loss_breakdown.items(), key=lambda x: x[1], reverse=True
+        )[:5]
+        for name, minutes in top_losses:
+            if minutes > 0:
+                lines.append(f"  - {name:<25s}: {minutes:.1f} menit")
+        return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# 3. FUNGSI PERHITUNGAN
+# ---------------------------------------------------------------------------
+
+def calculate_oee(record: ShiftRecord) -> OEEResult:
+    """Hitung Availability, Performance, Quality, dan OEE dari satu ShiftRecord."""
+
+    d = record.durations_minutes
+
+    planned_downtime = sum(d.get(col, 0.0) for col in PLANNED_DOWNTIME_COLUMNS)
+    unplanned_downtime = sum(d.get(col, 0.0) for col in UNPLANNED_DOWNTIME_COLUMNS)
+    support_time = sum(d.get(col, 0.0) for col in SUPPORT_ACTIVITY_COLUMNS)
+    drilling_time = d.get(DRILLING_COLUMN, 0.0)
+
+    planned_production_time = record.total_shift_minutes - planned_downtime
+    operating_time = planned_production_time - unplanned_downtime
+
+    if operating_time <= 0:
+        raise ValueError(
+            f"Operating time <= 0 pada shift {record.shift_id}. "
+            "Cek kembali input durasi (downtime melebihi shift time)."
+        )
+
+    # --- Availability ---
+    availability = operating_time / planned_production_time
+
+    # --- Performance ---
+    # Dihitung dari waktu drilling aktif dibanding waktu ideal untuk
+    # mencapai meter bor yang sama.
+    ideal_time = record.meter_bor_total * record.ideal_cycle_time_per_meter
+    performance = ideal_time / drilling_time if drilling_time > 0 else 0.0
+    performance = min(performance, 1.0)  # cap 100% (jaga2 data anomali)
+
+    # --- Quality ---
+    good_output = record.meter_bor_total - record.meter_bor_reject
+    quality = good_output / record.meter_bor_total if record.meter_bor_total > 0 else 0.0
+
+    oee = availability * performance * quality
+
+    loss_breakdown = {
+        col: d.get(col, 0.0)
+        for col in (PLANNED_DOWNTIME_COLUMNS + UNPLANNED_DOWNTIME_COLUMNS)
+    }
+
+    return OEEResult(
+        shift_id=record.shift_id,
+        planned_production_time=planned_production_time,
+        operating_time=operating_time,
+        drilling_time=drilling_time,
+        availability=availability,
+        performance=performance,
+        quality=quality,
+        oee=oee,
+        loss_breakdown=loss_breakdown,
+    )
+
+
+# ---------------------------------------------------------------------------
+# 4. BACA DATA DARI CSV
+# ---------------------------------------------------------------------------
+
+def load_shifts_from_csv(filepath: str) -> List[ShiftRecord]:
+    """
+    Format CSV yang diharapkan (lihat contoh: sample_dsc.csv):
+
+    shift_id,total_shift_minutes,meter_bor_total,meter_bor_reject,
+    ideal_cycle_time_per_meter,transportasi,aksesibilitas,safety_talk,...
+
+    Semua kolom durasi diisi dalam MENIT.
+    """
+    records = []
+    with open(filepath, newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            durations = {
+                col: float(row.get(col, 0) or 0) for col in ALL_TIME_COLUMNS
+            }
+            record = ShiftRecord(
+                shift_id=row["shift_id"],
+                durations_minutes=durations,
+                total_shift_minutes=float(row["total_shift_minutes"]),
+                meter_bor_total=float(row["meter_bor_total"]),
+                meter_bor_reject=float(row.get("meter_bor_reject", 0) or 0),
+                ideal_cycle_time_per_meter=float(row["ideal_cycle_time_per_meter"]),
+            )
+            records.append(record)
+    return records
+
+
+# ---------------------------------------------------------------------------
+# 5. CONTOH PENGGUNAAN
+# ---------------------------------------------------------------------------
+
+if __name__ == "__main__":
+    import sys
+
+    csv_path = sys.argv[1] if len(sys.argv) > 1 else "sample_dsc.csv"
+
+    shifts = load_shifts_from_csv(csv_path)
+
+    for shift in shifts:
+        result = calculate_oee(shift)
+        print(result.summary())
+        print()
