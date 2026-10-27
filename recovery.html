@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Get S(t)ick — Core Recovery</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="rig-frame">
+
+  <header class="panel-header">
+    <div class="header-left">
+      <div class="rivet"></div>
+      <div>
+        <p class="eyebrow">FIELD INSTRUMENT — MINE GEOLOGY</p>
+        <h1>Get S(t)ick</h1>
+        <p class="subtitle">Made By Tama</p>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="status-lamp" id="statusLamp"></div>
+      <span id="statusText">MENUNGGU INPUT</span>
+    </div>
+  </header>
+
+  <nav class="app-nav" aria-label="Halaman">
+    <a class="nav-tab" href="index.html">Stick Up</a>
+    <a class="nav-tab active" href="recovery.html" aria-current="page">Recovery</a>
+  </nav>
+
+  <main class="dashboard">
+
+    <!-- INPUT -->
+    <section class="panel input-panel">
+      <h2 class="panel-title"><span class="tag">01</span> Panjang Sampel per Interval</h2>
+
+      <div class="rec-settings">
+        <div>
+          <label for="startDepth">Kedalaman awal</label>
+          <div class="adv-field">
+            <input type="number" id="startDepth" value="0" step="0.5" min="0">
+            <span class="unit-sm">m</span>
+          </div>
+        </div>
+        <div>
+          <label for="intervalLen">Panjang interval</label>
+          <div class="adv-field">
+            <input type="number" id="intervalLen" value="1" step="0.1" min="0.1">
+            <span class="unit-sm">m</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="rec-head">
+        <span>Interval</span><span>Panjang sampel</span><span>Rec</span><span></span>
+      </div>
+      <div class="rec-rows" id="recRows"></div>
+
+      <button type="button" id="addRow" class="rec-add">+ TAMBAH INTERVAL</button>
+
+      <div class="error-box" id="errorBox" hidden></div>
+    </section>
+
+    <!-- HASIL -->
+    <section class="panel readout-panel">
+      <h2 class="panel-title"><span class="tag">02</span> Hasil Recovery</h2>
+
+      <div class="readout-grid">
+        <div class="readout-card highlight">
+          <p class="readout-label">Rata-rata Recovery</p>
+          <p class="readout-value" id="outAvg">—</p>
+          <p class="readout-unit">persen, dari <span id="outCount">0</span> interval</p>
+        </div>
+        <div class="readout-card">
+          <p class="readout-label">Total Core Loss</p>
+          <p class="readout-value" id="outLoss">—</p>
+          <p class="readout-unit">meter</p>
+        </div>
+      </div>
+
+      <div class="breakdown">
+        <div class="breakdown-row">
+          <span class="dot dot-a"></span>
+          <span class="bd-label">Total interval dibor</span>
+          <span class="bd-value" id="outDrilled">—</span>
+        </div>
+        <div class="breakdown-row">
+          <span class="dot dot-b"></span>
+          <span class="bd-label">Total panjang sampel</span>
+          <span class="bd-value" id="outSample">—</span>
+        </div>
+        <div class="breakdown-row">
+          <span class="dot dot-cb"></span>
+          <span class="bd-label">Interval swelling (sampel &gt; interval)</span>
+          <span class="bd-value" id="outSwell">—</span>
+        </div>
+      </div>
+
+      <div class="core-illus">
+        <p class="illus-title">Ilustrasi sampel per interval</p>
+        <div class="core-list" id="coreList">
+          <p class="core-empty">Isi panjang sampel untuk melihat ilustrasi.</p>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <section class="panel formula-panel">
+    <h2 class="panel-title"><span class="tag">REF</span> Rumus yang Digunakan</h2>
+    <div class="formula-grid">
+      <div class="formula-card">
+        <p class="formula-caption">Recovery per interval</p>
+        <p class="formula-eq">Rec = Panjang&nbsp;Sampel ÷ Interval × 100%</p>
+      </div>
+      <div class="formula-card">
+        <p class="formula-caption">Swelling</p>
+        <p class="formula-eq">Sampel &gt; Interval → swelling, Rec = 100%</p>
+      </div>
+      <div class="formula-card">
+        <p class="formula-caption">Rata-rata recovery</p>
+        <p class="formula-eq">Rata-rata = Σ Rec per interval ÷ Jumlah interval</p>
+      </div>
+    </div>
+    <p class="formula-footnote">Satu interval (default 1 m) dianggap 100%. Rata-rata dihitung dari nilai Rec tiap interval yang sudah diisi, bukan dari total panjang, sehingga satu interval yang mengembang (swelling) tidak menutupi interval lain yang loss. Interval yang belum diisi tidak ikut dihitung.</p>
+  </section>
+
+  <footer class="panel-footer">
+    <span>CORE RECOVERY · ALAT BANTU SUPERVISI PENGEBORAN</span>
+    <span>Bandingkan dengan panjang sampel aktual di core tray</span>
+  </footer>
+
+</div>
+
+<script src="recovery.js"></script>
+</body>
+</html>
